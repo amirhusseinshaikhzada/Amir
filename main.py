@@ -10,7 +10,7 @@ import flask
 create_tables()
 load_dotenv()
 bot_token = os.getenv("BOT_TOKEN")
-bot.set_webhook(url=f"https://amir-hussein-2022-2.onrender.com/{8511358078:AAEK24LwdrYJZ32NengtGp7tm_42UPkNZhM}")
+bot.set_webhook(url=f"https://amir-hussein-2022-2.onrender.com/{bot_token}")
 
 bot = telebot.TeleBot(bot_token , threaded=False)
 
