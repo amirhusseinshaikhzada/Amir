@@ -9,129 +9,280 @@ import flask
 
 create_tables()
 load_dotenv()
+
+import os
+import telebot
+import flask
+from flask import request
+from dotenv import load_dotenv
+# فرض می‌کنیم ماژول دیتابیس شما نامش query است
+import query 
+
+load_dotenv()
 bot_token = os.getenv("BOT_TOKEN")
-bot.set_webhook(url=f"https://amir-hussein-2022-2.onrender.com/{bot_token}")
 
-bot = telebot.TeleBot(bot_token , threaded=False)
-
+# استفاده از threaded=False برای سازگاری بهتر با Flask/Webhook
+bot = telebot.TeleBot(bot_token, threaded=False)
 app = flask.Flask(__name__)
 
+# ذخیره وضعیت کاربران (در حافظه - فقط برای تست)
 user_answers = {}
 
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Add Question" , "Take Quiz" , "My Results")
-    bot.send_message(message.chat.id , "Wellcome To Quiz Bot" , reply_markup=markup)
+    markup.add("Add Question", "Take Quiz", "My Results")
+    bot.send_message(message.chat.id, "Welcome To Quiz Bot!", reply_markup=markup)
 
-
-@bot.message_handler(func=lambda msg: msg.text in ["Add Question" , "Take Quiz" , "My Results"])
-def menu_handel(message):
+@bot.message_handler(func=lambda msg: msg.text in ["Add Question", "Take Quiz", "My Results"])
+def menu_handler(message):
     if message.text == "Add Question":
-        bot.send_message(message.chat.id , "Send Me The Question In This Format:\n Question | Option1 | option2 | Option3 | option4 | Correct Option Number")
-        bot.register_next_step_handler(message , add_question_handler)
+        bot.send_message(message.chat.id, "Send Me The Question In This Format:\n\nQuestion | Option1 | Option2 | Option3 | Option4 | Correct_Option_Number\n\nExample:\nWhat is Python? | OS | Animal | Browser | Language | 4")
+        bot.register_next_step_handler(message, add_question_handler)
+    
     elif message.text == "Take Quiz":
         start_quiz(message)
+    
     elif message.text == "My Results":
         scores = query.get_user_results(message.from_user.id)
         if scores:
-            avg = sum(s[0] for s in scores) / len(scores)
-            bot.send_message(message.chat.id , f"Your Past Scores: {[s[0] for s in scores]}\nAverage:{avg:.2f}")
+            # استخراج مقادیر از Tuple (مثلاً s[0])
+            score_list = [s[0] for s in scores]
+            avg = sum(score_list) / len(score_list)
+            bot.send_message(message.chat.id, f"Your Past Scores: {score_list}\nAverage: {avg:.2f}")
         else:
-            bot.send_message(message.chat.id , "No Results found.")
-
-
-
+            bot.send_message(message.chat.id, "No Results found.")
 
 def add_question_handler(message):
     try:
         parts = message.text.split("|")
         if len(parts) != 6:
-            raise ValueError
-        question , o1 , o2 , o3 , o4 , correct = [p.strip() for p in parts]
-        query.add_question(question , o1 , o2 , o3 , o4 , int(correct))
-        bot.send_message(message.chat.id , "Question Added Successfully.")
-    except Exception:
-        bot.send_message(message.chat.id , "Invalid Format. Try Again.")
-
-
-
-
+            raise ValueError("Wrong number of parts")
+        
+        question, o1, o2, o3, o4, correct = [p.strip() for p in parts]
+        # تبدیل عدد به int برای دیتابیس
+        query.add_question(question, o1, o2, o3, o4, int(correct))
+        bot.send_message(message.chat.id, "✅ Question Added Successfully.")
+    except Exception as e:
+        print(f"Error in add_question: {e}")
+        bot.send_message(message.chat.id, "❌ Invalid Format! Please use the | separator correctly.\nExample: Question | O1 | O2 | O3 | O4 | 4")
 
 def start_quiz(message):
     questions = query.get_all_questions()
     if not questions:
-        bot.send_message(message.chat.id , "No Questions Available.")
+        bot.send_message(message.chat.id, "❌ No Questions Available in the database.")
         return
-    user_answers[message.from_user.id] = {"Questions" : questions , "current" : 0 , "score" : 0}
-    send_question(message.chat.id , message.from_user.id)
+    
+    # ذخیره وضعیت شروع کوییز
+    user_answers[message.from_user.id] = {"Questions": questions, "current": 0, "score": 0}
+    send_question(message.chat.id, message.from_user.id)
 
+def send_question(chat_id, user_id):
+    if user_id not in user_answers:
+        return
 
-
-
-
-def send_question(chat_id , user_id):
     state = user_answers[user_id]
-    if state["current"] < len(state["Questions"]):
-        q = state["Questions"][state["current"]]
+    idx = state["current"]
+
+    if idx < len(state["Questions"]):
+        q = state["Questions"][idx]
+        # توجه: ساختار q بر اساس ترتیب ستون‌ها در دیتابیس است
+        # q[1]=ques, q[2]=o1, q[3]=o2, q[4]=o3, q[5]=o4, q[6]=correct
+        text = f"❓ **Question {idx+1}/{len(state['Questions'])}**\n\n{q[1]}\n\n1️⃣ {q[2]}\n2️⃣ {q[3]}\n3️⃣ {q[4]}\n4️⃣ {q[5]}"
+        
         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("1" , "2" , "3" , "4")
-        bot.send_message(chat_id , f"Q: {q[1]}\n1) {q[2]}\n2) {q[3]}\n3) {q[4]}\n4) {q[5]}" , reply_markup=markup)
-        bot.register_next_step_handler_by_chat_id(chat_id , check_answer)
+        markup.add("1", "2", "3", "4")
+        
+        bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+        bot.register_next_step_handler_by_chat_id(chat_id, check_answer)
     else:
-        finish_quiz(chat_id , user_id)
-
-
-
+        finish_quiz(chat_id, user_id)
 
 def check_answer(message):
     user_id = message.from_user.id
+    if user_id not in user_answers:
+        return
+
     state = user_answers[user_id]
     q = state["Questions"][state["current"]]
+
     try:
-        if int(message.text) == q[6]:
+        user_choice = int(message.text)
+        # مقایسه انتخاب کاربر با ستون مربوط به گزینه صحیح (ستون هفتم)
+        if user_choice == q[6]:
             state["score"] += 1
-    except:
-        pass
+    except (ValueError, IndexError):
+        pass # اگر کاربر دکمه را اشتباه زد یا عدد نبود، نادیده گرفته می‌شود
+
     state["current"] += 1
-    send_question(message.chat.id , user_id)
+    send_question(message.chat.id, user_id)
 
-
-
-def finish_quiz(chat_id , user_id):
+def finish_quiz(chat_id, user_id):
     state = user_answers[user_id]
     score = state["score"]
     total = len(state["Questions"])
-    query.save_result(user_id , score)
+    
+    # ذخیره در دیتابیس
+    query.save_result(user_id, score)
 
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("Add Question" , "Take Quiz" , "My Results")
+    markup.add("Add Question", "Take Quiz", "My Results")
 
-    bot.send_message(chat_id , f"Quiz Finished. Your Score: {score}/{total}" , reply_markup=markup)
-    del user_answers[user_id]
+    bot.send_message(chat_id, f"🎉 Quiz Finished!\n\n🏆 Your Score: {score}/{total}", reply_markup=markup)
+    
+    # پاک کردن وضعیت از حافظه
+    if user_id in user_answers:
+        del user_answers[user_id]
 
+# --- WEBHOOK SECTION ---
 
-
-
-
-
-
-@app.route(f"/{bot_token}" , methods=["POST"])
+@app.route(f"/{bot_token}", methods=["POST"])
 def webhook():
     raw = request.get_data().decode("utf-8")
-    print(f"Raw Update: {raw}")
     update = telebot.types.Update.de_json(raw)
-    print(f"Parsed Update: {update}")
     bot.process_new_updates([update])
-    return "0k" , 200
-
+    return "OK", 200
 
 @app.route("/")
 def index():
-    return "Bot Is Runing!" , 200
-
-
-
+    return "Bot is running!", 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0" , port=8080)
+    # در حالت محلی (Local) برای تست Webhook باید از Ngrok استفاده کنید
+    app.run(host="0.0.0.0", port=8080)
+
+
+
+
+
+
+
+
+
+
+
+# bot_token = os.getenv("BOT_TOKEN")
+
+# bot = telebot.TeleBot(bot_token , threaded=False)
+
+# app = flask.Flask(__name__)
+
+# user_answers = {}
+
+# @bot.message_handler(commands=["start"])
+# def send_welcome(message):
+#     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+#     markup.add("Add Question" , "Take Quiz" , "My Results")
+#     bot.send_message(message.chat.id , "Wellcome To Quiz Bot" , reply_markup=markup)
+
+
+# @bot.message_handler(func=lambda msg: msg.text in ["Add Question" , "Take Quiz" , "My Results"])
+# def menu_handel(message):
+#     if message.text == "Add Question":
+#         bot.send_message(message.chat.id , "Send Me The Question In This Format:\n Question | Option1 | option2 | Option3 | option4 | Correct Option Number")
+#         bot.register_next_step_handler(message , add_question_handler)
+#     elif message.text == "Take Quiz":
+#         start_quiz(message)
+#     elif message.text == "My Results":
+#         scores = query.get_user_results(message.from_user.id)
+#         if scores:
+#             avg = sum(s[0] for s in scores) / len(scores)
+#             bot.send_message(message.chat.id , f"Your Past Scores: {[s[0] for s in scores]}\nAverage:{avg:.2f}")
+#         else:
+#             bot.send_message(message.chat.id , "No Results found.")
+
+
+
+
+# def add_question_handler(message):
+#     try:
+#         parts = message.text.split("|")
+#         if len(parts) != 6:
+#             raise ValueError
+#         question , o1 , o2 , o3 , o4 , correct = [p.strip() for p in parts]
+#         query.add_question(question , o1 , o2 , o3 , o4 , int(correct))
+#         bot.send_message(message.chat.id , "Question Added Successfully.")
+#     except Exception:
+#         bot.send_message(message.chat.id , "Invalid Format. Try Again.")
+
+
+
+
+
+# def start_quiz(message):
+#     questions = query.get_all_questions()
+#     if not questions:
+#         bot.send_message(message.chat.id , "No Questions Available.")
+#         return
+#     user_answers[message.from_user.id] = {"Questions" : questions , "current" : 0 , "score" : 0}
+#     send_question(message.chat.id , message.from_user.id)
+
+
+
+
+
+# def send_question(chat_id , user_id):
+#     state = user_answers[user_id]
+#     if state["current"] < len(state["Questions"]):
+#         q = state["Questions"][state["current"]]
+#         markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+#         markup.add("1" , "2" , "3" , "4")
+#         bot.send_message(chat_id , f"Q: {q[1]}\n1) {q[2]}\n2) {q[3]}\n3) {q[4]}\n4) {q[5]}" , reply_markup=markup)
+#         bot.register_next_step_handler_by_chat_id(chat_id , check_answer)
+#     else:
+#         finish_quiz(chat_id , user_id)
+
+
+
+
+# def check_answer(message):
+#     user_id = message.from_user.id
+#     state = user_answers[user_id]
+#     q = state["Questions"][state["current"]]
+#     try:
+#         if int(message.text) == q[6]:
+#             state["score"] += 1
+#     except:
+#         pass
+#     state["current"] += 1
+#     send_question(message.chat.id , user_id)
+
+
+
+# def finish_quiz(chat_id , user_id):
+#     state = user_answers[user_id]
+#     score = state["score"]
+#     total = len(state["Questions"])
+#     query.save_result(user_id , score)
+
+#     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+#     markup.add("Add Question" , "Take Quiz" , "My Results")
+
+#     bot.send_message(chat_id , f"Quiz Finished. Your Score: {score}/{total}" , reply_markup=markup)
+#     del user_answers[user_id]
+
+
+
+
+
+
+
+# @app.route(f"/{bot_token}" , methods=["POST"])
+# def webhook():
+#     raw = request.get_data().decode("utf-8")
+#     print(f"Raw Update: {raw}")
+#     update = telebot.types.Update.de_json(raw)
+#     print(f"Parsed Update: {update}")
+#     bot.process_new_updates([update])
+#     return "0k" , 200
+
+
+# @app.route("/")
+# def index():
+#     return "Bot Is Runing!" , 200
+
+
+
+
+# if __name__ == "__main__":
+#     app.run(host="0.0.0.0" , port=8080)
