@@ -18,7 +18,6 @@ def create_tables():
 
 
     cur.execute('''
-
         CREATE TABLE IF NOT EXISTS questions (
             id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             question TEXT NOT NULL,
@@ -27,11 +26,8 @@ def create_tables():
             option3 TEXT NOT NULL,
             option4 TEXT NOT NULL,
             correct_option INTEGER NOT NULL
-                
         )
     ''')
-
-
 
     cur.execute('''
         CREATE TABLE IF NOT EXISTS results (
