@@ -13,35 +13,43 @@ def connect_to_db():
 
 
 
-def add_question(question , option1 , option2 , option3 , option4 , correct_option):
-    conn , cursor = connect_to_db()
-    cursor.execute('''
-        INSERT INTO questions (question , option1 , option2 , option3 , option4 , correct_option) VALUES (%s , %s , %s , %s , %s , %s)''' , (question , option1 , option2 , option3 , option4 , correct_option))
-    conn.commit()
-    conn.close()
-
-
+def add_question(question, option1, option2, option3, option4, correct_option):
+    try:
+        # استفاده از with باعث می‌شود اتصال و کرسر خودکار بسته شوند
+        with connect_to_db() as (conn, cursor):
+            cursor.execute('''
+                INSERT INTO questions (question, option1, option2, option3, option4, correct_option) 
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (question, option1, option2, option3, option4, correct_option))
+            conn.commit()
+            print("Question added successfully.")
+    except Exception as e:
+        print(f"Error adding question: {e}")
 
 def get_all_questions():
-    conn , cursor = connect_to_db()
-    cursor.execute("SELECT * FROM questions")
-    questions = cursor.fetchall()
-    conn.close()
-    return questions
+    try:
+        with connect_to_db() as (conn, cursor):
+            cursor.execute("SELECT * FROM questions")
+            return cursor.fetchall()
+    except Exception as e:
+        print(f"Error fetching questions: {e}")
+        return []  # در صورت خطا، لیست خالی برمی‌گرداند تا برنامه کرش نکند
 
-
-
-def save_result(user_id , score):
-    conn , cursor = connect_to_db()
-    cursor.execute("INSERT INTO results (user_id , score) VALUES (%s , %s)" , (user_id , score))
-    conn.commit()
-    conn.close()
-
-
+def save_result(user_id, score):
+    try:
+        with connect_to_db() as (conn, cursor):
+            cursor.execute("INSERT INTO results (user_id, score) VALUES (%s, %s)", (user_id, score))
+            conn.commit()
+            print("Result saved successfully.")
+    except Exception as e:
+        print(f"Error saving result: {e}")
 
 def get_user_results(user_id):
-    conn , cursor = connect_to_db()
-    cursor.execute("SELECT score FROM results WHERE user_id = %s" , (user_id , ))
-    scores = cursor.fetchall()
-    conn.close()
-    return scores
+    try:
+        with connect_to_db() as (conn, cursor):
+            # توجه: استفاده از (user_id,) برای تبدیل به tuple صحیح است
+            cursor.execute("SELECT score FROM results WHERE user_id = %s", (user_id,))
+            return cursor.fetchall()
+    except Exception as e:
+        print(f"Error fetching results: {e}")
+        return []
