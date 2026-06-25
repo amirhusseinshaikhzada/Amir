@@ -20,7 +20,7 @@ def create_tables():
     cur.execute('''
 
         CREATE TABLE IF NOT EXISTS questions (
-            id SERIAL PRIMARY KEY AUTOINCREMENT,
+            id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             question TEXT NOT NULL,
             option1 TEXT NOT NULL,
             option2 TEXT NOT NULL,
